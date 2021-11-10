@@ -1092,7 +1092,7 @@ function Export-Pcap {
 # Set-ExecutionPolicy Unrestricted
 
 # File
-$jsonPacketFile = "C:\Windows\Temp\LLDP.json"
+$jsonPacketFile = "C:\Temp\LLDP.json"
 
 # Capture
 $packet = Invoke-DiscoveryProtocolCapture -Type LLDP -Force -Verbose
