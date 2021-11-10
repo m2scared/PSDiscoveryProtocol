@@ -1111,5 +1111,9 @@ $objectPacket = [PsCustomObject]@{
 $jsonPacket = $objectPacket | ConvertTo-Json
 
 # Store
-$jsonPacket | Write-Output
+# Create directory path if non-existing
+New-Item -Path $jsonPacketFile -Force
 $jsonPacket | Out-File -FilePath $jsonPacketFile
+
+# Display
+$jsonPacket | Write-Output
