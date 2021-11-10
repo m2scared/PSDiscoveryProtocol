@@ -1104,6 +1104,7 @@ if ($null -ne $packet) {
 # Convert
 $objectPacket = [PsCustomObject]@{
     Date = [DateTime]::UtcNow | Get-Date -Format "o"
+    Adapters = Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceType -eq 6 } | Select-Object Name, MacAddress, InterfaceDescription, InterfaceIndex
     LLDPPacket = $packet
     LLDPPacketFragment = $packetFragment 
     Version = 1
