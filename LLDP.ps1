@@ -819,7 +819,7 @@ function ConvertFrom-LLDPPacket {
                     }
 
                     if ($Subtype -eq 3) {
-                        $Hash.Add('Port', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
+                        $Hash.Add('Port', [System.BitConverter]::ToString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
                     }
 
                     $Offset += $Length
