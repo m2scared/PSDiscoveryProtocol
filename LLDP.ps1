@@ -1095,10 +1095,10 @@ function Export-Pcap {
 $jsonPacketFile = "C:\Temp\LLDP.json"
 
 # Capture
-$packet = Invoke-DiscoveryProtocolCapture -Type LLDP -Force -Verbose
+$packet = Invoke-DiscoveryProtocolCapture -Type LLDP -Force
 $packetFragment = @{}
 if ($null -ne $packet) {
-    $packetFragment = ConvertFrom-LLDPPacket -Packet $packet.Fragment -Verbose 
+    $packetFragment = ConvertFrom-LLDPPacket -Packet $packet.Fragment
 }
 
 # Convert
