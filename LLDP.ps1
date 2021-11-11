@@ -784,7 +784,7 @@ function ConvertFrom-LLDPPacket {
                     }
 
                     if ($Subtype -eq 4) {
-                        $Hash.Add('ChassisId', [PhysicalAddress]::new($Packet[($Offset + 1)..($Offset + $Length - 1)]))
+                        $Hash.Add('ChassisId', [System.BitConverter]::ToString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
                     }
 
                     $Offset += $Length
