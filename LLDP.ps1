@@ -1092,7 +1092,8 @@ function Export-Pcap {
 # Set-ExecutionPolicy Unrestricted
 
 # File
-$jsonPacketFile = "C:\Temp\LLDP.json"
+$debugJsonFile = "C:\Temp\LLDP.debug.json"
+$jsonFile = "C:\Temp\LLDP.json"
 
 # Capture
 $packet = Invoke-DiscoveryProtocolCapture -Type LLDP -Force
@@ -1104,16 +1105,19 @@ if ($null -ne $packet) {
 # Convert
 $objectPacket = [PsCustomObject]@{
     Date = [DateTime]::UtcNow | Get-Date -Format "o"
-    LLDPPacket = $packet
-    LLDPPacketFragment = $packetFragment 
+    Debug = $packet
+    LLDP = $packetFragment 
     Version = 1
 }
-$jsonPacket = $objectPacket | ConvertTo-Json
+$debugJson = $objectPacket | ConvertTo-Json
+$json = $objectPacket | Select-Object -Property Date, LLDP, Version | ConvertTo-Json
 
 # Store
 # Create directory path if non-existing
-New-Item -Path $jsonPacketFile -Force
-$jsonPacket | Out-File -FilePath $jsonPacketFile
+New-Item -Path $jsonFile -Force | Out-Null
+$debugJson | Out-File -FilePath $debugJsonFile
+New-Item -Path $debugJsonFile -Force | Out-Null
+$json | Out-File -FilePath $jsonFile
 
 # Display
-$jsonPacket | Write-Output
+$json | Write-Output
