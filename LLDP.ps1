@@ -364,7 +364,8 @@ function Invoke-DiscoveryProtocolCapture {
                                 $Adapter = ($PhysicalAdapter).Where({ $_.InterfaceIndex -eq $EventData.MiniportIfIndex })
                                 $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue $Adapter.Name
                                 $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue $Adapter.InterfaceDescription
-                            } else {
+                            }
+                            else {
                                 Write-Warning "Unable to find the connected wired event adapter on $Computer."
                                 $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue "unknown"
                                 $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue "unknown"
@@ -1118,9 +1119,9 @@ if ($null -ne $packet) {
 
 # Convert
 $objectPacket = [PsCustomObject]@{
-    Date = [DateTime]::UtcNow | Get-Date -Format "o"
-    Debug = $packet
-    LLDP = $packetFragment 
+    Date    = [DateTime]::UtcNow | Get-Date -Format "o"
+    Debug   = $packet
+    LLDP    = $packetFragment 
     Version = 1
 }
 $debugJson = $objectPacket | ConvertTo-Json
