@@ -266,137 +266,151 @@ function Invoke-DiscoveryProtocolCapture {
 
             Write-Verbose "ETLFilePath: $ETLFilePath"
 
-            $Adapters = Get-NetAdapter -Physical @CimSession |
-            Where-Object { $_.Status -eq 'Up' -and $_.InterfaceType -eq 6 } |
-            Select-Object Name, MacAddress, InterfaceDescription, InterfaceIndex
+            $AllAdapters = Get-NetAdapter -Physical @CimSession
+            if ($AllAdapters) {
+                $Adapters = $AllAdapters |
+                Where-Object { $_.Status -eq 'Up' -and $_.InterfaceType -eq 6 } |
+                Select-Object Name, MacAddress, InterfaceDescription, InterfaceIndex
 
-            if ($Adapters) {
-                $MACAddresses = $Adapters.MacAddress.ForEach({ [PhysicalAddress]::Parse($_).ToString() })
-                $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
+                if ($Adapters) {
+                    $MACAddresses = $Adapters.MacAddress.ForEach({ [PhysicalAddress]::Parse($_).ToString() })
+                    $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
 
-                if ($Force.IsPresent) {
-                    Get-NetEventSession @CimSession | ForEach-Object {
-                        if ($_.SessionStatus -eq 'Running') {
-                            $_ | Stop-NetEventSession @CimSession
+                    if ($Force.IsPresent) {
+                        Get-NetEventSession @CimSession | ForEach-Object {
+                            if ($_.SessionStatus -eq 'Running') {
+                                $_ | Stop-NetEventSession @CimSession
+                            }
+                            $_ | Remove-NetEventSession @CimSession
                         }
-                        $_ | Remove-NetEventSession @CimSession
                     }
-                }
-
-                try {
-                    New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile @CimSession -ErrorAction Stop | Out-Null
-                }
-                catch [Microsoft.Management.Infrastructure.CimException] {
-                    if ($_.Exception.NativeErrorCode -eq 'AlreadyExists') {
-                        $Message = "Another NetEventSession already exists. Run Invoke-DiscoveryProtocolCapture with -Force switch to remove existing NetEventSessions."
-                        Write-Error -Message $Message
-                    }
-                    else {
-                        Write-Error -ErrorRecord $_
-                    }
-                    continue
-                }
-
-                $LinkLayerAddress = switch ($Type) {
-                    'CDP' { '01-00-0c-cc-cc-cc' }
-                    'LLDP' { '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
-                    Default { '01-00-0c-cc-cc-cc', '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
-                }
-
-                $PacketCaptureParams = @{
-                    SessionName      = $SessionName
-                    TruncationLength = 0
-                    CaptureType      = 'Physical'
-                    LinkLayerAddress = $LinkLayerAddress
-                }
-
-                Add-NetEventPacketCaptureProvider @PacketCaptureParams @CimSession | Out-Null
-
-                foreach ($Adapter in $Adapters) {
-                    Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True @CimSession | Out-Null
-                }
-
-                Start-NetEventSession -Name $SessionName @CimSession
-
-                $Seconds = $Duration
-                $End = (Get-Date).AddSeconds($Seconds)
-                while ($End -gt (Get-Date)) {
-                    $SecondsLeft = $End.Subtract((Get-Date)).TotalSeconds
-                    $Percent = ($Seconds - $SecondsLeft) / $Seconds * 100
-                    Write-Progress -Activity "Discovery Protocol Packet Capture" -Status "Capturing on $Computer..." -SecondsRemaining $SecondsLeft -PercentComplete $Percent
-                    [System.Threading.Thread]::Sleep(500)
-                }
-
-                Stop-NetEventSession -Name $SessionName @CimSession
-
-                $Events = Invoke-Command @PSSession -ScriptBlock {
-                    param(
-                        $ETLFilePath
-                    )
 
                     try {
-                        $Events = Get-WinEvent -Path $ETLFilePath -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
+                        New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile @CimSession -ErrorAction Stop | Out-Null
                     }
-                    catch {
-                        if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') {
+                    catch [Microsoft.Management.Infrastructure.CimException] {
+                        if ($_.Exception.NativeErrorCode -eq 'AlreadyExists') {
+                            $Message = "Another NetEventSession already exists. Run Invoke-DiscoveryProtocolCapture with -Force switch to remove existing NetEventSessions."
+                            Write-Error -Message $Message
+                        }
+                        else {
                             Write-Error -ErrorRecord $_
                         }
+                        continue
                     }
 
-                    [string[]]$XpathQueries = @(
-                        "Event/EventData/Data[@Name='FragmentSize']"
-                        "Event/EventData/Data[@Name='Fragment']"
-                        "Event/EventData/Data[@Name='MiniportIfIndex']"
-                    )
-
-                    $PropertySelector = [System.Diagnostics.Eventing.Reader.EventLogPropertySelector]::new($XpathQueries)
-
-                    foreach ($WinEvent in $Events) {
-                        $EventData = $WinEvent | Select-Object MachineName, TimeCreated
-                        $EventData | Add-Member -NotePropertyName FragmentSize -NotePropertyValue $null
-                        $EventData | Add-Member -NotePropertyName Fragment -NotePropertyValue $null
-                        $EventData | Add-Member -NotePropertyName MiniportIfIndex -NotePropertyValue $null
-                        $EventData.FragmentSize, $EventData.Fragment, $EventData.MiniportIfIndex = $WinEvent.GetPropertyValues($PropertySelector)
-                        $Adapter = (Get-NetAdapter -Physical).Where({ $_.InterfaceIndex -eq $EventData.MiniportIfIndex })
-                        $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue $Adapter.Name
-                        $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue $Adapter.InterfaceDescription
-                        $EventData
+                    $LinkLayerAddress = switch ($Type) {
+                        'CDP' { '01-00-0c-cc-cc-cc' }
+                        'LLDP' { '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
+                        Default { '01-00-0c-cc-cc-cc', '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
                     }
-                } -ArgumentList $ETLFilePath
 
-                $FoundPackets = $Events -as [DiscoveryProtocolPacket[]] | Where-Object {
-                    $_.IsDiscoveryProtocolPacket -and $_.SourceAddress -notin $MACAddresses
-                } | Group-Object MiniportIfIndex | ForEach-Object {
-                    $_.Group | Select-Object -First 1
-                }
+                    $PacketCaptureParams = @{
+                        SessionName      = $SessionName
+                        TruncationLength = 0
+                        CaptureType      = 'Physical'
+                        LinkLayerAddress = $LinkLayerAddress
+                    }
 
-                Remove-NetEventSession -Name $SessionName @CimSession
+                    Add-NetEventPacketCaptureProvider @PacketCaptureParams @CimSession | Out-Null
 
-                if (-not $NoCleanup.IsPresent) {
-                    Invoke-Command @PSSession -ScriptBlock {
+                    foreach ($Adapter in $Adapters) {
+                        Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True @CimSession | Out-Null
+                    }
+
+                    Start-NetEventSession -Name $SessionName @CimSession
+
+                    $Seconds = $Duration
+                    $End = (Get-Date).AddSeconds($Seconds)
+                    while ($End -gt (Get-Date)) {
+                        $SecondsLeft = $End.Subtract((Get-Date)).TotalSeconds
+                        $Percent = ($Seconds - $SecondsLeft) / $Seconds * 100
+                        Write-Progress -Activity "Discovery Protocol Packet Capture" -Status "Capturing on $Computer..." -SecondsRemaining $SecondsLeft -PercentComplete $Percent
+                        [System.Threading.Thread]::Sleep(500)
+                    }
+
+                    Stop-NetEventSession -Name $SessionName @CimSession
+
+                    $Events = Invoke-Command @PSSession -ScriptBlock {
                         param(
                             $ETLFilePath
                         )
 
-                        Remove-Item -Path $ETLFilePath -Force
+                        try {
+                            $Events = Get-WinEvent -Path $ETLFilePath -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
+                        }
+                        catch {
+                            if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') {
+                                Write-Error -ErrorRecord $_
+                            }
+                        }
+
+                        [string[]]$XpathQueries = @(
+                            "Event/EventData/Data[@Name='FragmentSize']"
+                            "Event/EventData/Data[@Name='Fragment']"
+                            "Event/EventData/Data[@Name='MiniportIfIndex']"
+                        )
+
+                        $PropertySelector = [System.Diagnostics.Eventing.Reader.EventLogPropertySelector]::new($XpathQueries)
+
+                        foreach ($WinEvent in $Events) {
+                            $EventData = $WinEvent | Select-Object MachineName, TimeCreated
+                            $EventData | Add-Member -NotePropertyName FragmentSize -NotePropertyValue $null
+                            $EventData | Add-Member -NotePropertyName Fragment -NotePropertyValue $null
+                            $EventData | Add-Member -NotePropertyName MiniportIfIndex -NotePropertyValue $null
+                            $EventData.FragmentSize, $EventData.Fragment, $EventData.MiniportIfIndex = $WinEvent.GetPropertyValues($PropertySelector)
+                            $PhysicalAdapter = Get-NetAdapter -Physical
+                            if ($PhysicalAdapter) {
+                                $Adapter = ($PhysicalAdapter).Where({ $_.InterfaceIndex -eq $EventData.MiniportIfIndex })
+                                $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue $Adapter.Name
+                                $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue $Adapter.InterfaceDescription
+                            } else {
+                                Write-Warning "Unable to find the connected wired event adapter on $Computer."
+                                $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue "unknown"
+                                $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue "unknown"
+                            }
+                            $EventData
+                        }
                     } -ArgumentList $ETLFilePath
-                }
 
-                if ($PSCmdlet.ParameterSetName -eq 'RemoteCapture') {
-                    Remove-PSSession @PSSession
-                    Remove-CimSession @CimSession
-                }
+                    $FoundPackets = $Events -as [DiscoveryProtocolPacket[]] | Where-Object {
+                        $_.IsDiscoveryProtocolPacket -and $_.SourceAddress -notin $MACAddresses
+                    } | Group-Object MiniportIfIndex | ForEach-Object {
+                        $_.Group | Select-Object -First 1
+                    }
 
-                if ($FoundPackets) {
-                    $FoundPackets
+                    Remove-NetEventSession -Name $SessionName @CimSession
+
+                    if (-not $NoCleanup.IsPresent) {
+                        Invoke-Command @PSSession -ScriptBlock {
+                            param(
+                                $ETLFilePath
+                            )
+
+                            Remove-Item -Path $ETLFilePath -Force
+                        } -ArgumentList $ETLFilePath
+                    }
+
+                    if ($PSCmdlet.ParameterSetName -eq 'RemoteCapture') {
+                        Remove-PSSession @PSSession
+                        Remove-CimSession @CimSession
+                    }
+
+                    if ($FoundPackets) {
+                        $FoundPackets
+                    }
+                    else {
+                        Write-Warning "No discovery protocol packets captured on $Computer in $Seconds seconds."
+                        return
+                    }
                 }
                 else {
-                    Write-Warning "No discovery protocol packets captured on $Computer in $Seconds seconds."
+                    Write-Warning "Unable to find a connected wired adapter on $Computer."
                     return
                 }
             }
             else {
-                Write-Warning "Unable to find a connected wired adapter on $Computer."
+                Write-Warning "Unable to find any adapter on $Computer."
                 return
             }
         }
