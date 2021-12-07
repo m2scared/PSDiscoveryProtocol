@@ -1130,9 +1130,9 @@ $json = $objectPacket | Select-Object -Property Date, LLDP, Version | ConvertTo-
 # Store
 # Create directory path if non-existing
 New-Item -Path $jsonFile -Force | Out-Null
-$debugJson | Out-File -FilePath $debugJsonFile
+$debugJson | Out-File -FilePath $debugJsonFile -encoding ASCII
 New-Item -Path $debugJsonFile -Force | Out-Null
-$json | Out-File -FilePath $jsonFile
+$json | Out-File -FilePath $jsonFile -encoding ASCII
 
 # Display
 $json | Write-Output
